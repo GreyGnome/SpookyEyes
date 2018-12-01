@@ -3,7 +3,7 @@
 #include <EEPROM.h>
 #include <stdbool.h>
 
-// Here are the pins:
+// Here are the pins: (where did I get this???)
 //#if defined( __AVR_ATtinyX4__ )
 // ATMEL ATTINY84 / ARDUINO
 //
@@ -17,8 +17,22 @@
 //  PWM        (D  4)  PA6  7|    |8   PA5  (D  5)        PWM
 //                           +----+
 
+// This one is used in the Arduino IDE...
+// From damellis' work:
+// ATMEL ATTINY84 / ARDUINO
+//
+//                           +-\/-+
+//                     VCC  1|    |14  GND
+//             (D 10)  PB0  2|    |13  AREF (D  0)
+//             (D  9)  PB1  3|    |12  PA1  (D  1) 
+//                     PB3  4|    |11  PA2  (D  2) 
+//  PWM  INT0  (D  8)  PB2  5|    |10  PA3  (D  3) 
+//  PWM        (D  7)  PA7  6|    |9   PA4  (D  4) 
+//  PWM        (D  6)  PA6  7|    |8   PA5  (D  5)        PWM
+//                           +----+
+
 //#ifdef EI_ATTINY24
-#define LEFT_EYEBALL 4   // == 
+#define LEFT_EYEBALL 6   // == 
 #define RIGHT_EYEBALL 5  // == 
 #define ON_OFF 10        // pin with light-sensitive resistor on it
 
@@ -94,7 +108,7 @@ unsigned long nowMillis = 0;
 
 uint8_t eeprom_time = 0;
 void setup() {
-  if (EEPROM.read(0) == 0xFF) EEPROM.write(0, eeprom_time); // INITIAL SETUP ONLY
+  if (EEPROM.read(0) == 0xFF) EEPROM.write(0, eeprom_time); // INITIAL SETUP ONLY; EEPROM's cells are reset to 255 when you upload the sketch.
   uint8_t check_time = 0;
   pinMode(LEFT_EYEBALL, OUTPUT);
   pinMode(RIGHT_EYEBALL, OUTPUT);
@@ -255,7 +269,7 @@ void loop() {
 #endif
   }
 #ifdef DEBUG
-  delay(1000);
+  delay(2000);
 #else
   delay(20000);
 #endif

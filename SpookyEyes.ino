@@ -34,7 +34,13 @@
 //#ifdef EI_ATTINY24
 #define LEFT_EYEBALL 6   // == 
 #define RIGHT_EYEBALL 5  // == 
-#define ON_OFF 10        // pin with light-sensitive resistor on it
+#define ON_OFF 0        // pin with light-sensitive resistor on it
+
+// --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+// --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+#define DEBUG
+// --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+// --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 
 static inline void left_eyeball(int level) {
     analogWrite(LEFT_EYEBALL, level);
@@ -107,32 +113,39 @@ unsigned long currentMillis = 0;
 unsigned long nowMillis = 0;
 
 uint8_t eeprom_time = 0;
+// During setup(), we flash the LEDs to indicate system state. There are 3 phases, with a delay of 1 second between each:
+// 1. Turn both eyes on for 1 second.
+// 2. Show the chip speed. Flash 8 times quickly for 8 MHz, 3 times quickly for 1 Mhz (CLKPR register == 3).
 void setup() {
   if (EEPROM.read(0) == 0xFF) EEPROM.write(0, eeprom_time); // INITIAL SETUP ONLY; EEPROM's cells are reset to 255 when you upload the sketch.
   uint8_t check_time = 0;
   pinMode(LEFT_EYEBALL, OUTPUT);
   pinMode(RIGHT_EYEBALL, OUTPUT);
   pinMode(ON_OFF, INPUT);
-  uint8_t oldSREG = SREG;
-  cli();
-  CLKPR = 0x80; // Enables us to perform the following...
-  // CLKPR = 0x00; // This is 8MHz. This uses 2.45 mA for the chip only.
-  CLKPR = 0x03; // This is the default anyway. Here for tutorial purposes. 1MHz. Uses 0.83 mA for the chip only.
+  both_eyeballs(255); // Hello! :-)
+  delay(1000);
+  both_eyeballs(0);
+  delay(1000);
+  // How to change your chip's clock speed, using the internal RC oscillator, from the default (1 MHz) to 8 MHz?
+  // Here you go. This is here for tutorial purposes. Remember, if you change this, you have to tell the Arduino IDE
+  // that the new speed is 8 MHz. This way it will set proper values in, for example, the delay() function.
+  // Beware that higher speed draws higher current (given below). Not good for battery operated stuff.
+  // Slowing the chip down to less that 1 MHz is NOT RECOMMENDED! You may make it very difficult to program your chip!!
+  // Using values of other than 0x00 (8 MHz), 0x01 (4 MHz), 0x02 (2 MHz), or 0x03 (1 MHz) could effectively brick your chip>
+  uint8_t oldSREG = SREG; // save interrupt state (we don't want to assume they're already off ===>>> unknown assumptions == Bad Programmer.)
+  cli();        // shut off interrupts
+  CLKPR = 0x80; // You need to set this in order to change the chip frequency. From the docs: "Within 4 cycles, write the desired value to CLKPS..."
+  // So now we write the desired value to CLKPS:
+  // CLKPR = 0x00; // Sets it to 8MHz. This uses 2.45 mA for the chip only. Uncomment this and comment the next line, if you want.
+  CLKPR = 0x03; // This is the default anyway. Uses 0.83 mA for the chip only. Happy. :-) This is low enough for battery operation.
   SREG = oldSREG;
   check_time = CLKPR;
   switch (check_time) {
     case 0x00:
       flash (8, 200, 0);
       break;
-    case 0xFF:
-      flash (6, 200, 0);
-      break;
-    case 0x09:
-      flash (1, 200, 0);
-      EEPROM.write(0, 0xFF);
-      break;
     default:
-      flash (check_time, 500, 0);
+      flash (check_time, 500, 0); // Dy default, flashes 3 times
       break;
   }
   delay(1000);
@@ -152,21 +165,15 @@ uint8_t OFF=0, ON=1;
 
 unsigned long d_time = 0;
 
-// --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
-// --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
-#undef DEBUG
-// --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
-// --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
-
 uint8_t is_light = false, light_ran_tonight = false;
 int looper = 0;
 #ifndef DEBUG
 const unsigned long HOUR_millis = 3600000;
-const uint8_t TOTAL_RUN_HOURS = 4; // Then it shuts off!!!!
+const uint8_t TOTAL_RUN_HOURS   = 4;     // Then it shuts off (until you reprogram it)!
 #else
 // --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 const unsigned long HOUR_millis = 10000; // DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
-const uint8_t TOTAL_RUN_HOURS = 100; // Then it shuts off!!!!
+const uint8_t TOTAL_RUN_HOURS   = 100;   // Then it shuts off (until you reprogram it)!
 // --- DEBUG DEBUG DEBUG DEBUG D--^^^^--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 #endif
 const uint8_t MAX_RUNTIME = 4; // hours, assuming HOUR_millis == 3600000
@@ -252,7 +259,7 @@ void loop() {
       both_eyeballs(255);
       delay(5000);
       for (i=0; i < 10; i++) {
-        spookyEyeballs(60, 255); // go up and down for a while
+        spookyEyeballs(20, 255); // go up and down for a while
         delay(500);
       }
       both_eyeballs(0);

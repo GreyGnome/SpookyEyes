@@ -1,21 +1,9 @@
 //#include <EnableInterrupt.h>
+// Using vim: :set ts=2 sts=2 sw=2 et ff=unix
 
 #include <EEPROM.h>
 #include <stdbool.h>
 
-// Here are the pins: (where did I get this???)
-//#if defined( __AVR_ATtinyX4__ )
-// ATMEL ATTINY84 / ARDUINO
-//
-//                           +-\/-+
-//                     VCC  1|    |14  GND
-//             (D  0)  PB0  2|    |13  AREF (D 10)
-//             (D  1)  PB1  3|    |12  PA1  (D  9)
-//                     PB3  4|    |11  PA2  (D  8)
-//  PWM  INT0  (D  2)  PB2  5|    |10  PA3  (D  7)
-//  PWM        (D  3)  PA7  6|    |9   PA4  (D  6)
-//  PWM        (D  4)  PA6  7|    |8   PA5  (D  5)        PWM
-//                           +----+
 
 // This one is used in the Arduino IDE...
 // From damellis' work:
@@ -30,6 +18,8 @@
 //  PWM        (D  7)  PA7  6|    |9   PA4  (D  4) 
 //  PWM        (D  6)  PA6  7|    |8   PA5  (D  5)        PWM
 //                           +----+
+//  USBasp connections:
+//  MOSI = D6 (pin 7), MISO=D5 (pin 8), SCK=D4 (pin 9), RST=pin 4
 
 //#ifdef EI_ATTINY24
 #define LEFT_EYEBALL 6   // == 
@@ -38,7 +28,7 @@
 
 // --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 // --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
-#undef DEBUG
+#define DEBUG
 // --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 // --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 
@@ -80,7 +70,7 @@ static inline void fadeOutBothEyeballs(uint8_t start) {
   both_eyeballs(0);
 }
 
-// Make the eyes go up and down.
+// Make the eyes go bright and dim.
 static inline void spookyEyeballs(uint8_t bottom, uint8_t top) {
   uint8_t step = 6, i=0;
 
@@ -101,9 +91,9 @@ void flash(uint8_t times, int delay_time, uint8_t previous_level) {
     int i = 0;
     for (i=0; i < times; i++) {
       left_eyeball(0); right_eyeball(0);
-      delay(delay_time);               // wait for a second
+      delay(delay_time);               // wait for a time
       left_eyeball(255); right_eyeball(255);
-      delay(delay_time);               // wait for a second
+      delay(delay_time);               // wait for a time
     }
     left_eyeball(previous_level); right_eyeball(previous_level);
 }
@@ -118,11 +108,11 @@ uint8_t eeprom_time = 0;
 // 2. Show the chip speed. Flash 8 times quickly for 8 MHz, 3 times quickly for 1 Mhz (CLKPR register == 3).
 void setup() {
   if (EEPROM.read(0) == 0xFF) EEPROM.write(0, eeprom_time); // INITIAL SETUP ONLY; EEPROM's cells are reset to 255 when you upload the sketch.
-  uint8_t check_time = 0;
+  uint8_t i = 0;
   pinMode(LEFT_EYEBALL, OUTPUT);
   pinMode(RIGHT_EYEBALL, OUTPUT);
   pinMode(ON_OFF, INPUT);
-  both_eyeballs(255); // Hello! :-)
+  both_eyeballs(255); // Hello! :-)  #BK.Hello
   delay(1000);
   both_eyeballs(0);
   delay(1000);
@@ -139,18 +129,16 @@ void setup() {
   // CLKPR = 0x00; // Sets it to 8MHz. This uses 2.45 mA for the chip only. Uncomment this and comment the next line, if you want.
   CLKPR = 0x03; // This is the default anyway. Uses 0.83 mA for the chip only. Happy. :-) This is low enough for battery operation.
   SREG = oldSREG;
-  check_time = CLKPR;
-  switch (check_time) {
+  switch (CLKPR) {
     case 0x00:
-      flash (8, 200, 0);
+      flash (8, 200, 0);          // Flash 8 times for 8 MHz
       break;
     default:
-      flash (check_time, 500, 0); // Dy default, flashes 3 times
+      flash (CLKPR, 500, 0); // Dy default, flashes 3 times #BK.check_time
       break;
   }
   delay(1000);
-  check_time = EEPROM.read(0);
-  switch (check_time) {
+  switch (EEPROM.read(0)) {
       case 0xFF:
         flash (6, 200, 0);
         break;
@@ -159,43 +147,58 @@ void setup() {
         break;
   }
   delay(1000);
+#ifdef DEBUG
+  currentMillis = millis(); // Since time is shortened, it could be confusing because we have
+                            // already consumed a significant time in the setup()
+#endif
 }
 
 uint8_t OFF=0, ON=1;
 
-unsigned long d_time = 0;
+unsigned long delta_time = 0;
 
 uint8_t is_light = false, light_ran_tonight = false;
 int looper = 0;
 #ifndef DEBUG
 const unsigned long HOUR_millis = 3600000;
-const uint8_t TOTAL_RUN_HOURS   = 4;     // Then it shuts off (until you reprogram it)!
+const uint8_t TOTAL_RUN_HOURS   = 40;     // Then it shuts off (until you reprogram it)! Notice it must be less than 255.
 #else
 // --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 const unsigned long HOUR_millis = 10000; // DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 const uint8_t TOTAL_RUN_HOURS   = 100;   // Then it shuts off (until you reprogram it)!
 // --- DEBUG DEBUG DEBUG DEBUG D--^^^^--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 #endif
-const uint8_t MAX_RUNTIME = 4; // hours, assuming HOUR_millis == 3600000
+// If we run 4 hours max and our total run hours is 40... that's 10 days!
+const uint8_t MAX_RUNTIME = 4; // hours daily, assuming HOUR_millis == 3600000.
 uint8_t latch = OFF;
 uint8_t latch_on = 0;
 uint8_t latch_off = MAX_RUNTIME + 1; // We start by having been off for a long time.
 
-void loop() {
+void loop() {   // #BK.loop
   uint8_t levels[] = {5, 20, 100, 180};
   uint8_t i=0;
 
   nowMillis = millis();
-  d_time = nowMillis - currentMillis;
-  // Comment this out if you want it to be completely silent after reaching
-  // TOTAL_RUN_HOURS.
+  delta_time = nowMillis - currentMillis; // currentMillis always starts at 0.
+  //
+  // Make sure we only run for TOTAL_RUN_HOURS
+  //
   if (eeprom_time > TOTAL_RUN_HOURS) {
+    // Comment this out if you want it to be completely silent after reaching TOTAL_RUN_HOURS.
     flash(3, 200, 0);
     delay(10000);
     return;
   }
-  if (d_time >= HOUR_millis) {
-    currentMillis = nowMillis - (d_time - HOUR_millis);
+  //
+  // Time management: After HOUR_millis time, perform time management.
+  //
+  // Count the hours we've been on with "latch_on", or the hours we've been off with "latch_off".
+  // The problem is: At dusk, the light may be variable. In one moment, it may be dark enough to turn
+  // on but the next moment light enough to think it should be off. So: Once it gets dark enough to
+  // turn on, stay on for some hours. Once it gets light enough to turn off, stay off for some hours.
+  //
+  if (delta_time >= HOUR_millis) { // An hour has passed
+    currentMillis = nowMillis - (delta_time - HOUR_millis);
     eeprom_time = EEPROM.read(0); // This is the number of hours we've been running.
     eeprom_time++;
     EEPROM.write(0, eeprom_time);
@@ -206,7 +209,7 @@ void loop() {
     //     then turn off the lights and stay off
     // check the light.
     // reset the latching mechanism once it goes light.
-    flash(3, 200, 0);
+    flash(3, 200, 0);      // #BK.time_management
     if (latch) latch_on++; // increment every hour
     else latch_off++;
   }
@@ -228,7 +231,9 @@ void loop() {
     }
   }
   if (latch) {
-    // Need code here to run for 4 hours.
+    //
+    // HERE'S THE SPOOKY STUFF
+    //
     if (latch_on <= MAX_RUNTIME) {
       delay(2000);
       left_eyeball(255); delay(1500); left_eyeball(0); delay(3000);
@@ -270,7 +275,8 @@ void loop() {
   }
   else {
 #ifdef DEBUG
-    flash(EEPROM.read(0), 100, 0);
+    flash(EEPROM.read(0), 100, 0); // #BK.indicate_duration
+    delay(100);
     /* both_eyeballs(0); */
     // delay(5000);
 #endif
@@ -281,3 +287,18 @@ void loop() {
   delay(20000);
 #endif
 }
+
+//////////// DEPRECATED //////////////////////////////////////////
+// Old pins: (where did I get this???)
+//#if defined( __AVR_ATtinyX4__ )
+// ATMEL ATTINY84 / ARDUINO
+//
+//                           +-\/-+
+//                     VCC  1|    |14  GND
+//             (D  0)  PB0  2|    |13  AREF (D 10)
+//             (D  1)  PB1  3|    |12  PA1  (D  9)
+//                     PB3  4|    |11  PA2  (D  8)
+//  PWM  INT0  (D  2)  PB2  5|    |10  PA3  (D  7)
+//  PWM        (D  3)  PA7  6|    |9   PA4  (D  6)
+//  PWM        (D  4)  PA6  7|    |8   PA5  (D  5)        PWM
+//                           +----+

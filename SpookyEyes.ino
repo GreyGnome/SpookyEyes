@@ -28,9 +28,9 @@
 
 // --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 // --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
-#define DEBUG
-// --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
-// --- DEBUG DEBUG DEBUG DEBUG D--vvvv--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+#undef DEBUG
+// --- DEBUG DEBUG DEBUG DEBUG D--^^^^--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+// --- DEBUG DEBUG DEBUG DEBUG D--^^^^--UG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 
 static inline void left_eyeball(int level) {
     analogWrite(LEFT_EYEBALL, level);
@@ -171,8 +171,8 @@ const uint8_t TOTAL_RUN_HOURS   = 100;   // Then it shuts off (until you reprogr
 // If we run 4 hours max and our total run hours is 40... that's 10 days!
 const uint8_t MAX_RUNTIME = 4; // hours daily, assuming HOUR_millis == 3600000.
 uint8_t latch = OFF;
-uint8_t latch_on = 0;
-uint8_t latch_off = MAX_RUNTIME + 1; // We start by having been off for a long time.
+uint8_t latch_time_on = 0;
+uint8_t latch_time_off = MAX_RUNTIME + 1; // We start by having been off for a long time.
 
 void loop() {   // #BK.loop
   uint8_t levels[] = {5, 20, 100, 180};
@@ -192,7 +192,7 @@ void loop() {   // #BK.loop
   //
   // Time management: After HOUR_millis time, perform time management.
   //
-  // Count the hours we've been on with "latch_on", or the hours we've been off with "latch_off".
+  // Count the hours we've been on with "latch_time_on", or the hours we've been off with "latch_time_off".
   // The problem is: At dusk, the light may be variable. In one moment, it may be dark enough to turn
   // on but the next moment light enough to think it should be off. So: Once it gets dark enough to
   // turn on, stay on for some hours. Once it gets light enough to turn off, stay off for some hours.
@@ -210,22 +210,24 @@ void loop() {   // #BK.loop
     // check the light.
     // reset the latching mechanism once it goes light.
     flash(3, 200, 0);      // #BK.time_management
-    if (latch) latch_on++; // increment every hour
-    else latch_off++;
+    if (latch) latch_time_on++; // increment every hour
+    else latch_time_off++;
   }
-  if (latch) {                      // it's running
-    if (latch_on > MAX_RUNTIME) {   // if we've run long enough, turn off
-      latch = OFF;
-      latch_off = 0;
+  if (latch) {                      // it's running.
+    if (latch_time_on > MAX_RUNTIME) {   // if we've run long enough, turn off
+      latch = OFF;                       // #BK.turn_spookiness_off
+      latch_time_off = 0;
     } else {                        // we've not been on long, continue running
     }
   }
   else {                            // it's not running
-    if (latch_off > 1 ) {  // We've been off for only 1 hour.
+    if (latch_time_off > 1 ) {  // We've been off for over 1 hour.
+      // #BK.check_the_light
       is_light = ! digitalRead(ON_OFF); // digitalRead == 0 ---->>> light outside.
-      if (! is_light) {             // if it's dark, turn on the latch
-        latch = ON;
-        latch_on = 0;
+      if ((! is_light) && (latch_time_on == 0)) {  // if it's dark and it had been light, turn
+        latch = ON;                              // on the latch
+      } else {                                   // it's light outside
+        latch_time_on = 0;                       // flag that says we haven't been on yet today
       }
     } else {                        //  we've not been off long, do nothing
     }
@@ -234,7 +236,7 @@ void loop() {   // #BK.loop
     //
     // HERE'S THE SPOOKY STUFF
     //
-    if (latch_on <= MAX_RUNTIME) {
+    if (latch_time_on <= MAX_RUNTIME) {
       delay(2000);
       left_eyeball(255); delay(1500); left_eyeball(0); delay(3000);
       left_eyeball(255); delay(1000); left_eyeball(0); delay(4000);
